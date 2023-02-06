@@ -1,0 +1,386 @@
+---
+title: "Sales & Marketing Analysis with R and Quarto - Bellabeat"
+format: html
+editor: visual
+---
+
+## The company
+
+Bellabeat, a high-tech manufacturer of health-focused products for women. Bellabeat is a successful small company, but they have the potential to become a larger player in the global smart device market. The team believes that analyzing smart device fitness data could help unlock new growth opportunities for the company.
+
+Bellabeat Website - <https://bellabeat.com/>.
+
+### Stakeholders
+
+. Urška Sršen --- Bellabeat's co-founder and Chief Creative Officer;
+
+. Sando Mur --- Mathematician and Bellabeat's co-founder;
+
+· Bellabeat marketing analytics team --- A team of data analysts responsible for collecting, analyzing, and reporting data that helps guide Bellabeat's marketing strategy.
+
+## Business Task
+
+Identify potential opportunities for growth and recommendations for the Bellabeat marketing strategy improvement based on trends in smart device usage.
+
+### Questions for analysis
+
+1.  What are some trends in smart device usage?
+2.  How could these trends apply to Bellabeat customers?
+3.  How could these trends help influence Bellabeat marketing strategy?
+
+```{r setup, include=FALSE, echo=FALSE}
+require("knitr")
+opts_knit$set(root.dir = "~/R/BellaBeat_Case_Study/Data Capstone Project/Fitabase Data 4.12.16-5.12.16")
+```
+
+## Load Libraries
+
+```{r}
+library(readr)
+library(plyr)
+library(tidyverse)
+library(dplyr)
+library(skimr)
+library(janitor)
+library(ggplot2)
+library(gridExtra)
+library(lubridate)
+```
+
+## Prepare
+
+### Importing Data Sets
+
+For this project, we will use FitBit Fitness Tracker Data from Kaggle for the analysis. This dataset contains personal fitness tracker data from 30 fitbit users who consented to the submission of information about their daily activity, steps, heart rate and sleep monitoring. It was sourced by a third-party, Amazon Mechanical Turk, between March-May 2016 and is licensed in the public domain. We are free to use the data for any purpose without restriction of copywright law.
+
+```{r read csv files}
+dailyActivity <- read.csv("dailyActivity_merged.csv")
+dailySleep <- read.csv("sleepDay_merged.csv")
+Intensities <- read.csv("hourlyIntensities_merged.csv")
+calories <- read.csv("hourlyCalories_merged.csv")
+weight <- read.csv("weightLogInfo_merged.csv")
+heartRate <- read.csv("heartrate_seconds_merged.csv")
+```
+
+### Check Data
+
+```{r}
+glimpse(dailyActivity)
+glimpse(dailySleep)
+glimpse(Intensities)
+glimpse(weight)
+```
+
+### Data Fixing and Transformation
+
+During this process, we split all datetime columns into separate date and time columns. All date and time columns were then renamed "date" and "time" and formatted to short date and time format for consistency. We'll be using R for ease of documentation using Quarto in addition to having wide variety of analysis and visualization tools.
+
+```{r}
+#Intensities Date/Time
+Intensities$ActivityHour = as.POSIXct(Intensities$ActivityHour, format = "%m/%d/%Y %H:%M:%S %p", tz=Sys.timezone())
+Intensities$time <- format(Intensities$ActivityHour, format = "%H:%M:%S")
+Intensities$date <- format(Intensities$ActivityHour, format = "%m/%d/%y")
+
+#Calories Date/Time
+calories$ActivityHour = as.POSIXct(calories$ActivityHour, format = "%m/%d/%Y %H:%M:%S %p", tz=Sys.timezone())
+calories$time <- format(calories$ActivityHour, format = "%H:%M:%S")
+calories$date <- format(calories$ActivityHour, format = "%m/%d/%y")
+
+##Activity Date/Time
+dailyActivity$ActivityDate = as.POSIXct(dailyActivity$ActivityDate, format = "%m/%d/%Y", tz=Sys.timezone())
+dailyActivity$date <- format(dailyActivity$ActivityDate, format = "%m/%d/%y")
+
+##Sleep Date/Time
+dailySleep$SleepDay = as.POSIXct(dailySleep$SleepDay, format = "%m/%d/%Y %I:%M:%S %p", tz=Sys.timezone())
+dailySleep$date <- format(dailySleep$SleepDay, format = "%m/%d/%y")
+```
+
+### Exploring and Summarizing statistics
+
+```{r}
+# Activity
+dailyActivity %>%  
+  select(TotalSteps,
+         TotalDistance,
+         SedentaryMinutes, Calories) %>%
+  summary()
+
+# Active minutes per category
+dailyActivity %>%
+  select(VeryActiveMinutes, FairlyActiveMinutes, LightlyActiveMinutes) %>%
+  summary()
+
+# Calories
+calories %>%
+  select(Calories) %>%
+  summary()
+
+# Sleep
+dailySleep %>%
+  select(TotalSleepRecords, TotalMinutesAsleep, TotalTimeInBed) %>%
+  summary()
+
+# Weight
+weight %>%
+  select(WeightKg, BMI) %>%
+  summary()
+```
+
+Some **interesting discoveries** from this summary:
+
+-   Average sedentary time is 991 minutes or 16 hours. Needs to be reduced.
+-   The majority of the participants are lightly active.
+-   On the average, participants sleep 1 time for 7 hours.
+
+Average total steps per day are 7638 which a little bit less for having health benefits for according to the CDC research <https://www.cdc.gov/>. Taking 10.000 steps per day was associated with a 65% lower risk compared with taking 4.000 steps.
+
+## Analysis
+
+In this part of the analysis we wanted to see what features of the devices are used more often. We are grouping the dailyActivity, dailySleep and weight, to find distinct users, the frequency of use (days logged) and the distribution.
+
+```{r}
+dailyActivity_Summary <- dailyActivity %>% 
+  group_by(Id) %>% 
+  dplyr::summarise(n = n(), steps = round(mean(TotalSteps)), calories = round(mean(Calories)),
+            VeryActiveMinutes = round(mean(VeryActiveMinutes)), 
+            FairlyActiveMinutes = round(mean(FairlyActiveMinutes)), 
+            LightlyActiveMinutes = round(mean(LightlyActiveMinutes)),
+            SedentaryMinutes = round(mean(SedentaryMinutes)))
+
+dailySleep_Summary <- dailySleep %>% 
+  group_by(Id) %>% 
+  dplyr::summarise(n = n(), avgTimeAsleep = round(mean(TotalMinutesAsleep)),
+            avgTimeInBed = round(mean(TotalTimeInBed)))
+
+weight_Summary <- weight %>% 
+  group_by(Id) %>% 
+  dplyr::summarize(n = n(), avg_weight_kg = round(mean(WeightKg)),
+            max_weight = max(WeightKg),
+            min_weight = min(WeightKg), 
+            averageBMI = mean(BMI))
+```
+
+```{r}
+n_distinct(dailyActivity_Summary$Id)
+n_distinct(dailySleep_Summary$Id)
+n_distinct(weight_Summary$Id)
+```
+
+This information tells us about number participants in each data sets.
+
+There is 33 participants in the activity, calories and intensities data sets, 24 in the sleep and only 8 in the weight data set.
+
+### Assign a category for the usage of each device feature
+
+We categorized the usage in three categories. **Low** used less that 10 times, **Medium** used more than 10 times and less then 21, **Regular** used more that 21 times.
+
+```{r}
+#Assign the range/categories based on the number of days logged (n)
+dailyActivity_Summary$Usage <- ifelse(dailyActivity_Summary$n <= 10, "Low", 
+                                      ifelse(dailyActivity_Summary$n < 21, "Medium", "Regular"))   
+
+dailySleep_Summary$Usage <- ifelse(dailySleep_Summary$n <=10, "Low",
+                                   ifelse(dailySleep_Summary < 21, "Medium", "Regular"))
+
+weight_Summary$Usage <- ifelse(weight_Summary$n <= 10, "Low",
+                               ifelse(weight_Summary$n < 21, "Medium", "Regular"))
+```
+
+### Group them by category
+
+```{r}
+dailyActivityUsage <- dailyActivity_Summary %>% 
+  group_by(Usage) %>% 
+  summarise(userCount = n(), average_usage = round(mean(n), 0))
+
+dailySleepUsage <- dailySleep_Summary %>% 
+  group_by(Usage) %>% 
+  summarise(UserCount = n(), average_usage = round(mean(n), 0))
+
+weightUsage <- weight_Summary %>% 
+  group_by(Usage) %>% 
+  summarise(UserCount = n(), average_usage = round(mean(n), 0))
+```
+
+### Merge activity and sleep data
+
+We merged the data to cross check information about activity and sleep information. The number of distinct users is 24 in both data sets.
+
+```{r}
+merged_data <- merge(dailyActivity, dailySleep, by = "Id")
+
+n_distinct(merged_data$Id)
+```
+
+#### Activity Feature Usage
+
+We can see that the activity feature is used regularly among the users.
+
+```{r}
+#plot Activity Usage per category
+ggplot(data = dailyActivityUsage, aes(x = Usage, y = userCount)) +
+  geom_bar(stat="identity",position = "stack", color="black",fill="darkorange") +
+  labs(title="Activity Feature Usage", x="Category", y="Count") +
+  geom_label(aes(label = userCount),color="black")
+```
+
+##### Activity Statistics
+
+We can check that the total of sedentary minutes is 1440 minutes or 24hrs and total steps are 0. We agree that the device was not used when this happened, so we will filter this data out.
+
+```{r}
+dailyActivity <- dailyActivity %>% 
+  filter(SedentaryMinutes != 1440 & TotalSteps != 0)
+```
+
+We run again the summary. The average total steps are 8329, which is below recommended average of 10000 steps by CDC <https://www.cdc.gov/>.
+
+```{r}
+percentage_usage_recommended <- round(nrow(dailyActivity_Summary[dailyActivity_Summary$steps < 10000,]) / nrow(dailyActivity_Summary) *100)
+```
+
+**79% of the users are below** recommended number of steps.
+
+Average of Sedentary Minutes after filtered data is 951 minutes or 15,85 hrs.
+
+```{r}
+ggplot(data = dailyActivity_Summary, aes(x = Usage, y = steps)) + 
+  geom_point() + 
+  labs(title = "Total Steps by Usage Category", x = "Total Steps", y = "Usage Category") +
+  geom_smooth(method = "lm") +
+  geom_hline(mapping = aes(yintercept = 10000), color = "orange") +
+  geom_text(mapping = aes(x = "Low", y = 11000, label = "10000 steps per day", srt = 0)) +
+  geom_text(mapping = aes(x = "Low", y = 7000, label = "79% below orange line")) +
+  annotate("rect", xmin = 0, xmax = 4, ymin = 0, ymax = 10000, alpha = .2)
+
+```
+
+#### Sleep Feature Usage
+
+```{r}
+#plot sleep Usage per category
+ggplot(data = dailySleepUsage, aes(x = Usage, y = UserCount)) +
+  geom_bar(stat="identity", color="black",fill="darkorange") +
+  labs(title="Sleep Feature Usage", x="Category", y="Count") +
+  geom_label(aes(label = UserCount),color="black")
+```
+
+##### Average Time in Bed vs Time Asleep
+
+```{r}
+
+#mean Time in Bed
+mean_TIB <-  mean(dailySleep$TotalTimeInBed)
+mean_TIB
+
+#mean Time Asleep
+mean_TAS <- mean(dailySleep$TotalMinutesAsleep)
+mean_TAS
+```
+
+We crosscheck the minutes asleep with the total steps and we can see that people sleep better and the recommended amount of hours if the do a minimum of 10.000 steps per day.
+
+```{r}
+ggplot(data = merged_data, aes(x = TotalMinutesAsleep, y = TotalSteps)) + 
+  labs(title = "Total Minutes Asleep vs Total Steps", x = "Total Minutes Asleep", y = "Total Steps") +
+  geom_point(color = alpha("orange", 0.1)) 
+```
+
+We confirm that the majority of our population doesn't take too long to fall asleep, as the average time in bed is close to time asleep.
+
+```{r}
+#plot time in bed/time asleep
+ggplot(data = dailySleep, aes(x = TotalMinutesAsleep, y = TotalTimeInBed)) + 
+  geom_point(aes(color = TotalTimeInBed)) + 
+  geom_hline(mapping = aes(yintercept = mean_TIB), color = "yellow") +
+  geom_vline(mapping = aes(xintercept = mean_TAS), color = "red") +
+  labs(title = "Total Time in Bed vs Total Time Asleep", x = "Total Time Asleep", y = "Total Time in bed") + 
+  geom_smooth(method = "lm") +
+  scale_color_gradient(low="orange",high="darkgreen")
+```
+
+#### Weight Feature Usage
+
+```{r}
+#plot Weight Feature Usage per category
+ggplot(data = weightUsage, aes(x = Usage, y = UserCount)) +
+  geom_bar(stat="identity", color="black",fill="darkorange") +
+  labs(title="Weight Feature Usage", x="Category", y="Count") +
+  geom_label(aes(label = UserCount),color="black")
+```
+
+##### Total Distance vs Calories
+
+We can see that there few users that are very active and they burn more calories as well.
+
+```{r}
+ggplot(data = dailyActivity_Summary, aes(x = VeryActiveMinutes, y = calories)) +
+  geom_point(aes(color = Usage)) +
+  geom_smooth() +
+  labs(title = "Total Distance vs Calories") + 
+  scale_x_continuous(limits = c (0, 100))
+```
+
+##### Steps and calories average
+
+```{r}
+#mean steps
+mean_steps <- mean(dailyActivity_Summary$steps)
+mean_steps
+
+#mean calories
+mean_calories <- mean(dailyActivity_Summary$calories)
+mean_calories
+```
+
+There is a trend line that confirm if we do **more steps we will burn more calories**.
+
+```{r}
+#plot calories/steps
+ggplot(data = dailyActivity, aes(x = TotalSteps, y = Calories)) + 
+  geom_point(aes(color = Calories)) +
+  labs(title = "Calories burned for step taken", x = "Total steps taken", y = "Calories burned") +
+  geom_smooth(method = "lm") +
+  geom_hline(mapping = aes(yintercept = mean_calories), color = "yellow") +
+  geom_vline(mapping = aes(xintercept = mean_steps), color = "red") +
+  geom_text(mapping = aes(x = 10000, y = 500, label = "Average Steps", srt = -90)) +
+  geom_text(mapping = aes(x = 32000, y = 2500, label = "Average Calories", srt = 0)) +
+  scale_color_gradient(low="orange",high="darkgreen")
+```
+
+##### BMI vs Weight
+
+```{r}
+#mean BMI
+mean_BMI <- mean(weight_Summary$averageBMI)
+mean_BMI
+
+#mean weight
+mean_weight <- mean(weight_Summary$avg_weight_kg)
+mean_weight
+```
+
+```{r}
+#plot bmi vs weight
+ggplot(data = weight, aes(x = WeightKg, y = BMI)) + 
+  geom_point(aes(color = BMI)) +
+  labs(title = "BMI vs Weight", x = "Weight", y = "BMI") +
+  geom_smooth(method = "lm") +
+  geom_hline(mapping = aes(yintercept = mean_BMI), color = "yellow") +
+  geom_vline(mapping = aes(xintercept = mean_weight), color = "red") +
+  geom_text(mapping = aes(x = 92 , y = 45, label = "Average Weight - 78kg", srt = 0)) +
+  geom_text(mapping = aes(x = 120, y = 27, label = "Average BMI - 28kg/m2", srt = 0)) +
+  scale_color_gradient(low="orange",high="darkgreen")
+```
+
+## Recommendations
+
+-   Enable users to set **daily/weekly goals of action** items such as steps, exercise, sleep and calories burned (specific to weight goals).
+-   The app should **encourage users** to meet the recommended 10,000 steps and at least 7 hours of sleep daily.
+-   **Water intake reminders** that would recommend appropriate volume of water intakes and program reminders at intervals for the users.
+-   The sleep tracker, which is just as important as an exercise tracker, should help provide **deeper analysis** of users' night sleep showing how much time one spends in deep sleep, restless or asleep.
+-   Alert users of long periods of inactivity and **send reminders** to move. Alert users of bedtime based on their settings.
+-   **Allow pairing or data sync** with smart weighing scales for more regular weight tracking.
+-   The sample was little. Maybe in the future we must increase the number of the participants.
+
+This analysis was made by Tiago A. de Sousa using R and Quarto - February 2023
